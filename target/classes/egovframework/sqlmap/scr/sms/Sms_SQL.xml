@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN" "http://www.ibatis.com/dtd/sql-map-2.dtd">
+<sqlMap namespace="Sms">
+	<!-- SMS 전송 -->
+    <update id="INS_SMS_001000" parameterClass="java.util.Map">
+		INSERT INTO UMS_DATA 
+		(
+			CMID, 
+			CINFO, 
+			MSG_TYPE, 
+			STATUS, 
+			REQUEST_TIME, 
+			DEST_PHONE, 
+			SEND_PHONE, 
+			MSG_BODY
+		) 
+		VALUES 
+		(
+			#CMID#, 
+			#CINFO#, 
+			#MSGTYPE#, 
+			#STATUS#, 
+			NOW(), 
+			#DESTPHONE#, 
+			#SENDPHONE#, 
+			#MSG#
+		)
+		;
+    </update>
+</sqlMap>

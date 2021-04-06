@@ -1,0 +1,1880 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN" "http://www.ibatis.com/dtd/sql-map-2.dtd">
+<sqlMap namespace="Admin">
+	<typeAlias  alias="sqlMapNoCamel" type="kcert.framework.util.EgovMapNoCamel"/>
+	<typeAlias  alias="sqlMap" type="egovframework.rte.psl.dataaccess.util.EgovMap"/>
+	<typeAlias  alias="loginVO" type="kcert.admin.vo.LoginVO"/>
+    
+    <!-- 로그인 처리를 위한 resultMap -->
+	<resultMap id="login" class="kcert.admin.vo.LoginVO">
+		<result property="adminf_id" column="adminf_id" columnIndex="1"/>
+		<result property="adminf_pwd" column="adminf_pwd" columnIndex="2"/>
+		<result property="adminf_nm" column="adminf_nm" columnIndex="3"/>
+		<result property="adminf_grd" column="adminf_grd" columnIndex="4"/>
+		<result property="adminf_rusr" column="adminf_rusr" columnIndex="5"/>
+		<result property="adminf_rdt" column="adminf_rdt" columnIndex="6"/>
+	</resultMap>
+	
+	<parameterMap id="SequenceParams" class="map">
+		<parameter property="CD" jdbcType="VARCHAR" javaType="java.lang.String" mode="IN"/>
+		<parameter property="SQ" jdbcType="NUMERIC" javaType="java.lang.Long" mode="OUT"/>
+	</parameterMap>
+	
+	<!-- 시퀀스 채번 -->
+	<procedure id="admin_nextval" parameterMap="SequenceParams">
+		{CALL SP_NEXTVAL(?,?)}
+	</procedure>
+	
+	<!-- 시퀀스 번호 확인 -->
+	<procedure id="admin_currentval" parameterMap="SequenceParams">
+		{CALL SP_CURRVAL(?,?)}
+	</procedure>
+	
+	<!-- 로그인 -->
+	<select id="SEL_AMDIN_LOGIN" parameterClass="kcert.admin.vo.LoginVO" resultMap="login">
+		SELECT 
+			ADMINF_ID
+			,ADMINF_PWD
+			,ADMINF_NM
+			,(SELECT CDDTL_NM FROM TBICM_CDDTL WHERE CDCLS_CLSCD='0001' AND CDDTL_DCD=A.ADMINF_GRD) AS ADMINF_GRD
+			,ADMINF_RUSR
+			,ADMINF_RDT
+		FROM TBICM_ADMINF A
+		WHERE 1=1
+			AND ADMINF_ID	= #adminf_id#
+			AND ADMINF_PWD	= #adminf_pwd#
+			AND ADMINF_DELYN	= 'Y'
+		;
+	</select>
+	
+	<!-- 긴급공지사항 조회 -->
+	<select id="SEL_BRD_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+		SELECT
+			*
+		FROM
+		(
+			SELECT
+			@RNUM := @RNUM+1 AS ROWNUM
+			,A.EMGBRD_NO
+			,A.PSHG_SNO
+			,A.EMGBRD_TTL
+			,A.EMGBRD_CNTNT
+			,CONCAT(SUBSTRING(A.EMGBRD_STDT,1,4),'-',SUBSTRING(A.EMGBRD_STDT,5,2),'-',SUBSTRING(A.EMGBRD_STDT,7,2),' ',SUBSTRING(A.EMGBRD_STDT,9,2),':',SUBSTRING(A.EMGBRD_STDT,11,2)) AS EMGBRD_STDT
+			,CONCAT(SUBSTRING(A.EMGBRD_EDDT,1,4),'-',SUBSTRING(A.EMGBRD_EDDT,5,2),'-',SUBSTRING(A.EMGBRD_EDDT,7,2),' ',SUBSTRING(A.EMGBRD_EDDT,9,2),':',SUBSTRING(A.EMGBRD_EDDT,11,2)) AS EMGBRD_EDDT
+			,A.EMGBRD_ORD
+			,A.ADMINF_GRD
+			,DATE_FORMAT(A.EMGBRD_RDT, '%Y-%m-%d') AS EMGBRD_RDT
+			,DATE_FORMAT(A.EMGBRD_UDT, '%Y-%m-%d') AS EMGBRD_UDT
+			FROM
+			(
+				SELECT
+				EMGBRD_NO
+				,PSHG_SNO
+				,EMGBRD_TTL
+				,EMGBRD_CNTNT
+				,EMGBRD_STDT
+				,EMGBRD_EDDT
+				,EMGBRD_ORD
+				,(SELECT CDDTL_NM FROM TBICM_CDDTL WHERE CDCLS_CLSCD='0001' AND CDDTL_DCD=(SELECT ADMINF_GRD FROM TBICM_ADMINF WHERE ADMINF_ID = A.ADMINF_ID)) AS ADMINF_GRD
+				,EMGBRD_RDT
+				,EMGBRD_UDT
+				FROM TBICM_EMGBRD A, (SELECT @ROWNUM:=0) R
+				WHERE 1=1
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						EMGBRD_TTL LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+					<isEqual prepend="AND" property="searchCondition" compareValue="1">
+						EMGBRD_CNTNT LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="stDate">
+					DATE_FORMAT(EMGBRD_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="etDate">
+					REPLACE(#etDate#,'-','') >= DATE_FORMAT(EMGBRD_RDT, '%Y%m%d')
+				</isNotEmpty>
+				AND EMGBRD_DELYN = 'N'
+				ORDER BY EMGBRD_ORD, EMGBRD_NO DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+    
+    <!-- 긴급공지사항 개수 조회 -->
+	<select id="SEL_BRD_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+		SELECT
+			COUNT(*) AS TOTCNT
+		FROM TBICM_EMGBRD
+		WHERE 1=1
+		<isNotEmpty property="searchKeyword">
+			<isEqual prepend="AND" property="searchCondition" compareValue="0">
+				EMGBRD_TTL LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+			<isEqual prepend="AND" property="searchCondition" compareValue="1">
+				EMGBRD_CNTNT LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(EMGBRD_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(EMGBRD_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND EMGBRD_DELYN = 'N'
+		;
+    </select>
+    
+    <!-- 긴급공지사항 등록 -->
+    <update id="INS_BRD_001001"  parameterClass="java.util.Map">
+    	INSERT INTO TBICM_EMGBRD
+    	(
+    		EMGBRD_NO
+			,PSHG_SNO
+			,EMGBRD_TTL
+			,EMGBRD_CNTNT
+			,EMGBRD_STDT
+			,EMGBRD_EDDT
+			,EMGBRD_ORD
+			,ADMINF_ID
+    	)
+    	VALUES
+    	(
+    		#EMGBRD_NO#
+    		,#PSSNO#
+    		,#EMGBRD_TTL#
+    		,#EMGBRD_CNTNT#
+    		,#EMGBRD_STDT#
+    		,#EMGBRD_EDDT#
+    		,#EMGBRD_ORD#
+    		,#ADMINF_ID#
+    	)
+    	;
+    </update>
+    
+    <!-- 긴급공지사항 조회 -->
+	<select id="SEL_BRD_001009" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT
+			EMGBRD_NO,
+			EMGBRD_ORD
+		FROM TBICM_EMGBRD
+		WHERE 1=1
+		AND EMGBRD_ORD != 'OFF'
+		ORDER BY EMGBRD_ORD
+		;
+	</select>
+	
+	<!-- 기존팝업 순서 변경 -->
+    <update id="UPT_BRD_001009"  parameterClass="java.util.Map">
+    	UPDATE TBICM_EMGBRD
+    		SET EMGBRD_ORD = #EMGBRD_ORD#
+    	WHERE 1=1
+    	AND EMGBRD_NO = #EMGBRD_NO#
+    	;
+    </update>
+    
+    <!-- 긴급공지사항 상세조회 -->
+	<select id="SEL_BRD_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT    
+			EMGBRD_NO    
+			,PSHG_SNO    
+			,EMGBRD_TTL    
+			,EMGBRD_CNTNT    
+			,CONCAT(SUBSTRING(A.EMGBRD_STDT,1,4),'-',SUBSTRING(A.EMGBRD_STDT,5,2),'-',SUBSTRING(A.EMGBRD_STDT,7,2)) AS EMGBRD_STDT_DD    
+			,SUBSTRING(A.EMGBRD_STDT,9,2) AS EMGBRD_STDT_HH    
+			,SUBSTRING(A.EMGBRD_STDT,11,2) AS EMGBRD_STDT_MM    
+			,CONCAT(SUBSTRING(A.EMGBRD_EDDT,1,4),'-',SUBSTRING(A.EMGBRD_EDDT,5,2),'-',SUBSTRING(A.EMGBRD_EDDT,7,2)) AS EMGBRD_EDDT_DD    
+			,SUBSTRING(A.EMGBRD_EDDT,9,2) AS EMGBRD_EDDT_HH    
+			,SUBSTRING(A.EMGBRD_EDDT,11,2) AS EMGBRD_EDDT_MM    
+			,EMGBRD_ORD   
+		FROM TBICM_EMGBRD A
+		WHERE 1=1   
+		AND EMGBRD_DELYN = 'N'
+		AND EMGBRD_NO = #EMGBRD_NO#
+	</select>
+	
+	<!-- 긴급공지사항 삭제 -->
+	<delete id="DEL_BRD_001000" parameterClass="java.util.Map">
+		DELETE 
+		FROM TBICM_EMGBRD 
+		WHERE 1=1
+		AND EMGBRD_NO = #EMGBRD_NO#
+	</delete>
+	
+	<!-- 긴급공지사항 수정 -->
+    <update id="UPT_BRD_001001" parameterClass="java.util.Map">
+    	UPDATE TBICM_EMGBRD
+    		SET  EMGBRD_TTL	= #EMGBRD_TTL#
+    		,EMGBRD_CNTNT = #EMGBRD_CNTNT#
+    		,EMGBRD_STDT = #EMGBRD_STDT#
+    		,EMGBRD_EDDT = #EMGBRD_EDDT#
+    		,EMGBRD_ORD = #EMGBRD_ORD#
+    		,ADMINF_ID = #ADMINF_ID#
+    		,EMGBRD_UDT = NOW()
+    	WHERE 1=1
+    	AND EMGBRD_NO = #EMGBRD_NO#
+    	;
+    </update>
+    
+    <!-- 관리자 비밀번호 변경 -->
+    <!-- <update id="UPT_ADM_001001" parameterClass="kcert.admin.vo.LoginVO">
+    	UPDATE TBICM_ADMINF
+    	SET ADMINF_PWD = #adminf_pwd#
+    	,ADMINF_UDT = NOW()
+    	WHERE 1=1
+    	AND ADMINF_ID	= #adminf_id#
+    </update> -->
+    
+    <!-- IP등록 리스트 조회 -->
+	<select id="SEL_IPM_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+		SELECT
+			*
+		FROM
+		(
+			SELECT
+			@RNUM := @RNUM+1 AS ROWNUM
+			,A.IPMGR_NO
+			,A.IPMGR_NM
+			,A.IPMGR_IP
+			,A.IPMGR_USEYN
+			,DATE_FORMAT(A.IPMGR_RDT, '%Y-%m-%d') AS IPMGR_RDT
+			,DATE_FORMAT(A.IPMGR_UDT, '%Y-%m-%d') AS IPMGR_UDT
+			FROM
+			(
+				SELECT
+					IPMGR_NO
+					,IPMGR_NM
+					,IPMGR_IP
+					,IPMGR_USEYN
+					,IPMGR_RDT
+					,IPMGR_UDT
+				FROM TBICM_IPMGR A, (SELECT @ROWNUM:=0) R
+				WHERE 1=1
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						IPMGR_NM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+					<isEqual prepend="AND" property="searchCondition" compareValue="1">
+						IPMGR_IP LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="stDate">
+					DATE_FORMAT(IPMGR_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="etDate">
+					REPLACE(#etDate#,'-','') >= DATE_FORMAT(IPMGR_RDT, '%Y%m%d')
+				</isNotEmpty>
+				ORDER BY IPMGR_NO DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+    
+    <!-- IP등록 리스트 개수 조회 -->
+	<select id="SEL_IPM_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+		SELECT
+			COUNT(*) AS TOTCNT
+		FROM TBICM_IPMGR
+		WHERE 1=1
+		<isNotEmpty property="searchKeyword">
+			<isEqual prepend="AND" property="searchCondition" compareValue="0">
+				IPMGR_NM LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+			<isEqual prepend="AND" property="searchCondition" compareValue="1">
+				IPMGR_IP LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(IPMGR_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(IPMGR_RDT, '%Y%m%d')
+		</isNotEmpty>
+		;
+    </select>
+    
+    <!-- IP등록 -->
+    <update id="INS_IPM_001001"  parameterClass="java.util.Map">
+    	INSERT INTO TBICM_IPMGR
+    	(
+    		IPMGR_NO
+			,IPMGR_NM
+			,IPMGR_IP
+			,IPMGR_USEYN
+    	)
+    	VALUES
+    	(		
+    		#IPMGR_NO#
+			,#IPMGR_NM#
+			,#IPMGR_IP#
+			,#IPMGR_USEYN#
+    	)
+    	;
+    </update>
+    
+    <!-- IP주소 상세조회 -->
+	<select id="SEL_IPM_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT    
+			IPMGR_NO
+			,IPMGR_NM
+			,IPMGR_IP
+			,IPMGR_USEYN
+			,IPMGR_RDT
+			,IPMGR_UDT
+		FROM TBICM_IPMGR A
+		WHERE 1=1   
+		AND IPMGR_NO = #IPMGR_NO#
+	</select>
+	
+	<!-- IP 수정 -->
+    <update id="UPT_IPM_001001" parameterClass="java.util.Map">
+    	UPDATE TBICM_IPMGR
+    		SET  
+    		IPMGR_NM		= #IPMGR_NM#
+    		,IPMGR_IP 		= #IPMGR_IP#
+    		,IPMGR_USEYN 	= #IPMGR_USEYN#
+    		,IPMGR_UDT 		= NOW()
+    	WHERE 1=1
+    	AND IPMGR_NO = #IPMGR_NO#
+    	;
+    </update>
+	
+	<!-- IP 삭제 -->
+	<delete id="DEL_IPM_001000" parameterClass="java.util.Map">
+		DELETE 
+		FROM TBICM_IPMGR 
+		WHERE 1=1
+		AND IPMGR_NO = #IPMGR_NO#
+	</delete>
+    
+    <!-- 허용 아이피 조회 -->
+    <select id="SEL_IPM_S001009" resultClass="sqlMap">
+    	SELECT
+    		IPMGR_IP
+    	FROM TBICM_IPMGR
+    	WHERE 1=1
+    	AND IPMGR_USEYN = 'Y'
+    	;
+    </select>
+    
+    <!-- APP정보 리스트 조회 -->
+	<select id="SEL_APP_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+		SELECT
+			*
+		FROM
+		(
+			SELECT
+			@RNUM := @RNUM+1 AS ROWNUM
+			,A.APPINF_NO
+			,A.APPINF_PKNM
+			,A.APPINF_APPNM
+			,A.APPINF_ID
+			,A.APPINF_KEY
+			,A.APPINF_USEYN
+			,DATE_FORMAT(A.APPINF_RDT, '%Y-%m-%d') AS APPINF_RDT
+			,DATE_FORMAT(A.APPINF_UDT, '%Y-%m-%d') AS APPINF_UDT
+			FROM
+			(
+				SELECT
+					APPINF_NO
+					,APPINF_PKNM
+					,APPINF_APPNM
+					,APPINF_ID
+					,APPINF_KEY
+					,APPINF_USEYN
+					,APPINF_RDT
+					,APPINF_UDT
+				FROM TBICM_APPINF A, (SELECT @ROWNUM:=0) R
+				WHERE 1=1
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						APPINF_APPNM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+					<isEqual prepend="AND" property="searchCondition" compareValue="1">
+						APPINF_PKNM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="stDate">
+					DATE_FORMAT(APPINF_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="etDate">
+					REPLACE(#etDate#,'-','') >= DATE_FORMAT(APPINF_RDT, '%Y%m%d')
+				</isNotEmpty>
+				ORDER BY APPINF_NO DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+    
+    <!-- APP정보 리스트 개수 조회 -->
+	<select id="SEL_APP_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+		SELECT
+			COUNT(*) AS TOTCNT
+		FROM TBICM_APPINF
+		WHERE 1=1
+		<isNotEmpty property="searchKeyword">
+			<isEqual prepend="AND" property="searchCondition" compareValue="0">
+				APPINF_APPNM LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+			<isEqual prepend="AND" property="searchCondition" compareValue="1">
+				APPINF_PKNM LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(APPINF_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(APPINF_RDT, '%Y%m%d')
+		</isNotEmpty>
+		;
+    </select>
+    
+    <!-- APP정보 등록 -->
+    <update id="INS_APP_001001"  parameterClass="java.util.Map">
+    	INSERT INTO TBICM_APPINF
+    	(
+    		APPINF_NO
+			,APPINF_PKNM
+			,APPINF_APPNM
+			,APPINF_ID
+			,APPINF_KEY
+			,APPINF_USEYN
+    	)
+    	VALUES
+    	(		
+    		#APPINF_NO#
+			,#APPINF_PKNM#
+			,#APPINF_APPNM#
+			,#APPINF_ID#
+			,#APPINF_KEY#
+			,#APPINF_USEYN#
+    	)
+    	;
+    </update>
+    
+    <!-- APP정보 상세조회 -->
+	<select id="SEL_APP_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT    
+			APPINF_NO
+			,APPINF_PKNM
+			,APPINF_APPNM
+			,APPINF_ID
+			,APPINF_KEY
+			,APPINF_USEYN
+			,APPINF_RDT
+			,APPINF_UDT
+		FROM TBICM_APPINF
+		WHERE 1=1   
+		AND APPINF_NO = #APPINF_NO#
+	</select>
+	
+	<!-- APP정보 수정 -->
+    <update id="UPT_APP_001001" parameterClass="java.util.Map">
+    	UPDATE TBICM_APPINF
+    		SET  
+    		APPINF_PKNM		= #APPINF_PKNM#
+    		,APPINF_APPNM 	= #APPINF_APPNM#
+    		,APPINF_ID 		= #APPINF_ID#
+    		,APPINF_KEY 	= #APPINF_KEY#
+    		,APPINF_USEYN 	= #APPINF_USEYN#
+    		,APPINF_UDT 	= NOW()
+    	WHERE 1=1
+    	AND APPINF_NO = #APPINF_NO#
+    	;
+    </update>
+	
+	<!-- APP정보 삭제 -->
+	<delete id="DEL_APP_001000" parameterClass="java.util.Map">
+		DELETE 
+		FROM TBICM_APPINF 
+		WHERE 1=1
+		AND APPINF_NO = #APPINF_NO#
+	</delete>
+	
+	<!-- My그룹 리스트 조회 -->
+	<select id="SEL_GRP_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+		SELECT
+			B.*
+			,(SELECT COUNT(*) FROM TBICM_GRPUSR WHERE MYGRP_NO = B.MYGRP_NO) AS MYGRPUCNT
+		FROM
+		(
+			SELECT
+			@RNUM := @RNUM+1 AS ROWNUM
+			,A.MYGRP_NO
+			,A.MYGRP_NM
+			,A.MYGRP_USEYN
+			,DATE_FORMAT(A.MYGRP_RDT, '%Y-%m-%d') AS MYGRP_RDT
+			,DATE_FORMAT(A.MYGRP_UDT, '%Y-%m-%d') AS MYGRP_UDT
+			FROM
+			(
+				SELECT
+					MYGRP_NO
+					,MYGRP_NM
+					,MYGRP_USEYN
+					,MYGRP_RDT
+					,MYGRP_UDT
+				FROM TBICM_MYGRP A, (SELECT @ROWNUM:=0) R
+				WHERE 1=1
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						MYGRP_NM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="stDate">
+					DATE_FORMAT(MYGRP_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="etDate">
+					REPLACE(#etDate#,'-','') >= DATE_FORMAT(MYGRP_RDT, '%Y%m%d')
+				</isNotEmpty>
+				ORDER BY MYGRP_NO DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+    
+    <!-- My 그룹 리스트 개수 조회 -->
+	<select id="SEL_GRP_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+		SELECT
+			COUNT(*) AS TOTCNT
+		FROM TBICM_MYGRP
+		WHERE 1=1
+		<isNotEmpty property="searchKeyword">
+			<isEqual prepend="AND" property="searchCondition" compareValue="0">
+				MYGRP_NM LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(MYGRP_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(MYGRP_RDT, '%Y%m%d')
+		</isNotEmpty>
+		;
+    </select>
+    
+    <!-- 지역정보 조회 -->
+    <select id="SEL_ORG_001000" resultClass="sqlMap">
+   		SELECT
+   			JIYUK_CD AS CD, 
+   			JIYUK_NM AS NM
+   		FROM TBICM_JIYUK
+   		WHERE 1=1
+   		AND JIYUK_USEYN = 'Y'
+   		ORDER BY JIYUK_SORT
+   		;
+    </select>
+    
+    <!-- 지사정보 조회 -->
+    <select id="SEL_ORG_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT 
+			DISTINCT CD, NM 
+		FROM 
+		(
+			SELECT 
+				GRPINF_JSCD AS CD, 
+				GRPINF_JSNM AS NM, 
+				CASE WHEN GRPINF_JSNM='공단본부' THEN '9999999999999999' ELSE GRPINF_DPFCOD END AS GRPINF_DPFCOD
+			FROM TBICM_GRPINF
+			WHERE 1=1
+			AND GRPINF_JSCD IN (
+			<isEqual property="JYCD" compareValue="CD00A">
+				'A00' 
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD01A">
+				'A53', 'A0B', 'A32', 'A47', 'A43', 'A44', 'A22', 'A26', 'A57', 'A13', 'A54', 'A45', 'A46', 'A40', 'A21', 'A55', 'A29', 'A48', 'A49'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00C">
+				'C0R', 'C2S', 'C3S', 'C4S', 'C5S', 'C6S', 'C7S', 'CFT', 'CGT', 'C9S', 'CAS', 'CCT', 'CDT', 'CBT', 'CET', 'CDD' 
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00D">
+				'D0R', 'D9S', 'D3S', 'DAT', 'D4S', 'D5S', 'D6S', 'D7S', 'D8T', 'DDD'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00E">
+				'E0R', 'E9S', 'E8S', 'E3S', 'E4S', 'EAT', 'E5T', 'E6T', 'EDD'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00F">
+				'F0R', 'F2S', 'F3S', 'FAS', 'F4S', 'F5S', 'F6S', 'FBS', 'F8S', 'FDD'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00G">
+				'G0R', 'G2S', 'G3S', 'G4S', 'G5S', 'G6S', 'G7S', 'GAT', 'G8S', 'GDD'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00H">
+				'H0R', 'H2S', 'H3S', 'H4T', 'H5T', 'H6T', 'HDD' 
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00B">
+				'B0R'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CD00T">
+				'T1R', 'U1R', 'M1R', 'R1R', 'Q1R', 'P1R', 'J2R', 'S1R', 'L1R', 'K1R'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CDGGU">
+				'GGU'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CDDDE">
+				'DDE'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CDX0R">
+				'X0R'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CDW0R">
+				'W0R'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CDV0R">
+				'V0R'
+			</isEqual>
+			<isEqual property="JYCD" compareValue="CDIOR">
+				'IOR'
+			</isEqual>
+			)
+			AND GRPINF_BSSTS='01' 
+		) A
+		ORDER BY A.GRPINF_DPFCOD
+    </select>
+    
+    <!-- 부서정보 조회 -->
+    <select id="SEL_ORG_001002" parameterClass="java.util.Map" resultClass="sqlMap">
+			SELECT 
+				GRPINF_JSCD AS JSCD,
+				GRPINF_JSNM AS JSNM,
+				GRPINF_BSCD AS BSCD, 
+				GRPINF_BSNM AS BSNM 
+			FROM TBICM_GRPINF 
+			WHERE 1=1
+				AND GRPINF_BSSTS='01'
+				AND GRPINF_JSCD = #JSCD#
+			<isEqual property="JSCD" compareValue="A53">
+			<!-- 공단본부(A53), 산재모병원 건립추진단(A53) 코드번호가 동일하므로 지사이름을 받아 검색 -->
+				AND GRPINF_JSNM = #JSNM#
+			</isEqual>
+			ORDER BY GRPINF_DPFCOD
+    </select>
+    
+    <!-- 사용자 정보 조회 -->
+    <select id="SEL_ORG_001003" parameterClass="java.util.Map" resultClass="sqlMap">
+			SELECT
+				*
+			FROM 
+			(
+				SELECT
+					USRINF_ID AS UID,
+					LPAD(USRINF_ID,20,'0') AS USRINF_ID_ORD,
+					USRINF_NM AS UNM,
+					USRINF_JWCD AS JWCD,
+					IFNULL(USRINF_OF1,'') AS OFF1,
+					IFNULL(USRINF_OF2,'') AS OFF2,
+					CASE WHEN USRINF_ID='7525' THEN '' ELSE IFNULL(USRINF_PHONE,'') END AS PHONE,
+					IFNULL(USRINF_EMAIL,'') AS EMAIL,
+					(
+						SELECT 
+							DISTINCT GRPINF_JSNM 
+						FROM TBICM_GRPINF 
+						WHERE 1=1
+						AND GRPINF_JSCD = A.USRINF_JSCD
+						<isEqual property="JSCD" compareValue="A53">
+							AND GRPINF_JSNM = #JSNM#
+						</isEqual>
+						<isEqual property="JSCD" compareValue="FFT">
+							 LIMIT 1
+						</isEqual>
+					) AS JSNM,
+					(
+						SELECT 
+							DISTINCT GRPINF_BSNM 
+						FROM TBICM_GRPINF 
+						WHERE GRPINF_JSCD = A.USRINF_JSCD 
+							AND GRPINF_BSCD = A.USRINF_BSCD 
+						<isEqual property="JSCD" compareValue="A53">
+							AND GRPINF_JSNM = #JSNM#
+						</isEqual>
+					) AS BSNM,
+					(
+						SELECT 
+							CDBASE_CDNM 
+						FROM TBICM_CDBASE 
+						WHERE CDBASE_CD = A.USRINF_JWCD 
+							AND CDBASE_SYSTCD='PT' 
+							AND CDBASE_CDID='53'
+					) AS JWNM,
+					A.USRINF_POLICY AS POLICY,
+					CASE WHEN (SELECT JWINF_SORT FROM TBICM_JWINF WHERE JWINF_ID = A.USRINF_JWCD) IS NULL THEN 999 ELSE (SELECT JWINF_SORT FROM TBICM_JWINF WHERE JWINF_ID = A.USRINF_JWCD) END AS SORT_NO
+				FROM TBICM_USRINF A 
+				WHERE 1=1
+					AND USRINF_JSCD = #JSCD# 
+					AND USRINF_BSCD = #BSCD#
+					AND USRINF_JAEJIKSTATE IS NOT NULL
+					<isNotEmpty property="searchKeyword">
+						<isEqual prepend="AND" property="searchCondition" compareValue="0">
+							A.USRINF_ID LIKE CONCAT('%',#searchKeyword#,'%')
+						</isEqual>
+						<isEqual prepend="AND" property="searchCondition" compareValue="1">
+							A.USRINF_NM LIKE CONCAT('%',#searchKeyword#,'%')
+						</isEqual>
+					</isNotEmpty>
+			) A
+			ORDER BY A.SORT_NO ASC, A.USRINF_ID_ORD ASC
+    </select>
+    
+    
+    <!-- 사용자 정보 조회(지역선택, 지사선택) -->
+    <select id="SEL_ORG_001004" parameterClass="java.util.Map" resultClass="sqlMap">
+			SELECT
+				*
+			FROM
+			(
+				SELECT
+					A.USRINF_ID AS UID,
+					LPAD(A.USRINF_ID,20,'0') AS USRINF_ID_ORD,
+					A.USRINF_NM AS UNM,
+					A.USRINF_JWCD AS JWCD,
+					IFNULL(A.USRINF_OF1,'') AS OFF1,
+					IFNULL(A.USRINF_OF2,'') AS OFF2,
+					CASE WHEN A.USRINF_ID='7525' THEN '' ELSE IFNULL(A.USRINF_PHONE,'') END AS PHONE,
+					IFNULL(A.USRINF_EMAIL,'') AS EMAIL,
+					B.GRPINF_JSNM AS JSNM,
+					B.GRPINF_BSNM AS BSNM,
+					(
+						SELECT 
+							CDBASE_CDNM 
+						FROM TBICM_CDBASE 
+						WHERE CDBASE_CD = A.USRINF_JWCD 
+							AND CDBASE_SYSTCD='PT' 
+							AND CDBASE_CDID='53'
+					) AS JWNM,
+					A.USRINF_POLICY AS POLICY,
+					CASE WHEN (SELECT JWINF_SORT FROM TBICM_JWINF WHERE JWINF_ID = A.USRINF_JWCD) IS NULL THEN 999 ELSE (SELECT JWINF_SORT FROM TBICM_JWINF WHERE JWINF_ID = A.USRINF_JWCD) END AS SORT_NO,
+					CASE WHEN B.GRPINF_JSNM='공단본부' THEN '9999999999999999' ELSE B.GRPINF_DPFCOD END AS GRPINF_DPFCOD,
+					B.GRPINF_BSCD AS BSCD
+				FROM TBICM_USRINF A
+				LEFT OUTER JOIN TBICM_GRPINF B
+					ON A.USRINF_JSCD	= B.GRPINF_JSCD
+					AND A.USRINF_BSCD	= B.GRPINF_BSCD
+				WHERE 1=1
+				<isNotEmpty property="JYCD">
+					<isEmpty prepend="AND" property="JSCD">
+						GRPINF_JSCD IN (
+						<isEqual property="JYCD" compareValue="CD00A">
+							'A00' 
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD01A">
+							'A53', 'A0B', 'A32', 'A47', 'A43', 'A44', 'A22', 'A26', 'A57', 'A13', 'A54', 'A45', 'A46', 'A40', 'A21', 'A55', 'A29', 'A48', 'A49'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00C">
+							'C0R', 'C2S', 'C3S', 'C4S', 'C5S', 'C6S', 'C7S', 'CFT', 'CGT', 'C9S', 'CAS', 'CCT', 'CDT', 'CBT', 'CET', 'CDD' 
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00D">
+							'D0R', 'D9S', 'D3S', 'DAT', 'D4S', 'D5S', 'D6S', 'D7S', 'D8T', 'DDD'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00E">
+							'E0R', 'E9S', 'E8S', 'E3S', 'E4S', 'EAT', 'E5T', 'E6T', 'EDD'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00F">
+							'F0R', 'F2S', 'F3S', 'FAS', 'F4S', 'F5S', 'F6S', 'FBS', 'F8S', 'FDD'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00G">
+							'G0R', 'G2S', 'G3S', 'G4S', 'G5S', 'G6S', 'G7S', 'GAT', 'G8S', 'GDD'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00H">
+							'H0R', 'H2S', 'H3S', 'H4T', 'H5T', 'H6T', 'HDD' 
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00B">
+							'B0R'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CD00T">
+							'T1R', 'U1R', 'M1R', 'R1R', 'Q1R', 'P1R', 'J2R', 'S1R', 'L1R', 'K1R'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CDGGU">
+							'GGU'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CDDDE">
+							'DDE'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CDX0R">
+							'X0R'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CDW0R">
+							'W0R'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CDV0R">
+							'V0R'
+						</isEqual>
+						<isEqual property="JYCD" compareValue="CDIOR">
+							'IOR'
+						</isEqual>
+						)
+					</isEmpty>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="JSCD">
+					GRPINF_JSCD = #JSCD#
+				</isNotEmpty>
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						A.USRINF_ID LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+					<isEqual prepend="AND" property="searchCondition" compareValue="1">
+						A.USRINF_NM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				AND B.GRPINF_BSSTS='01'
+				AND A.USRINF_JAEJIKSTATE IS NOT NULL
+			) A
+			ORDER BY A.GRPINF_DPFCOD ASC, BSCD ASC, SORT_NO ASC, A.USRINF_ID_ORD ASC
+			;
+    </select>
+    
+    
+    <!-- My Group 정보 등록 -->
+    <update id="INS_GRP_001001" parameterClass="java.util.Map">
+    	INSERT INTO TBICM_MYGRP
+    	(
+    		MYGRP_NO
+			,MYGRP_NM
+    	)
+    	VALUES
+    	(		
+    		#MYGRP_NO#
+			,#MYGRP_NM#
+    	)
+    	;
+    </update>
+    
+    <select id="SEL_GRP_001009" parameterClass="java.util.Map" resultClass="sqlMap">
+    	SELECT
+    		USRINF_ID	AS ID
+			,USRINF_NM	AS NM
+    		,IFNULL(USRINF_TOKEN,'') AS TOKEN
+    		,(
+				SELECT 
+					CDBASE_CDNM 
+				FROM TBICM_CDBASE 
+				WHERE CDBASE_CD = A.USRINF_JWCD 
+					AND CDBASE_SYSTCD='PT' 
+					AND CDBASE_CDID='53'
+			) AS JWNM
+			,USRINF_JSCD AS JSCD
+    		,(
+    			SELECT
+    				DISTINCT GRPINF_JSNM
+    			FROM TBICM_GRPINF
+    			WHERE 1=1
+    			AND GRPINF_JSCD = A.USRINF_JSCD
+			) AS JSNM
+			,USRINF_BSCD AS BSCD
+    		,(
+    			SELECT
+    				DISTINCT GRPINF_BSNM
+    			FROM TBICM_GRPINF
+    			WHERE 1=1
+    			AND GRPINF_JSCD = A.USRINF_JSCD 
+				AND GRPINF_BSCD = A.USRINF_BSCD 
+			) AS BSNM
+			,USRINF_POLICY AS POLICY
+    	FROM TBICM_USRINF A
+    	WHERE 1=1
+    	AND USRINF_ID IN (
+    		$PARAMS$
+    	)
+    </select>
+    
+    <!-- My Group 정보 등록 -->
+    <update id="INS_GRP_001009" parameterClass="java.util.Map">
+    	INSERT INTO TBICM_GRPUSR
+    	(
+    		GRPUSR_NO
+			,MYGRP_NO
+			,GRPUSR_ID
+    	)
+    	VALUES
+    	(		
+    		#GRPUSR_NO#
+    		,#MYGRP_NO#
+    		,#GRPUSR_ID#
+    	)
+    	;
+    </update>
+    
+    <!-- My Group 상세조회 -->
+	<select id="SEL_GRP_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT    
+			A.MYGRP_NO		AS MNO
+			,A.MYGRP_NM 	AS MNM
+			,B.GRPUSR_NO 	AS UNO
+			,B.GRPUSR_ID 	AS UID
+			,C.USRINF_NM	AS UNM
+			,LPAD(C.USRINF_ID,20,'0') AS USRINF_ID_ORD
+			,(
+				SELECT 
+					G.GRPINF_JSNM
+				FROM TBICM_GRPINF G
+				WHERE C.USRINF_JSCD = G.GRPINF_JSCD
+					AND C.USRINF_BSCD = G.GRPINF_BSCD
+			 ) AS JSNM
+			,(
+				SELECT 
+					G.GRPINF_BSNM 
+				FROM TBICM_GRPINF G
+				WHERE C.USRINF_JSCD = G.GRPINF_JSCD
+					AND C.USRINF_BSCD = G.GRPINF_BSCD
+			 ) AS BSNM
+			,(
+				SELECT 
+					JWINF_NM
+				FROM TBICM_JWINF
+				WHERE JWINF_ID = C.USRINF_JWCD
+			) AS JWNM
+			,CASE WHEN IFNULL(C.USRINF_POLICY,'P000000000')!='NULL' THEN C.USRINF_POLICY ELSE 'P000000000' END  AS POLICY
+			,CASE WHEN (SELECT JWINF_SORT FROM TBICM_JWINF WHERE JWINF_ID = C.USRINF_JWCD) IS NULL THEN 999 ELSE (SELECT JWINF_SORT FROM TBICM_JWINF WHERE JWINF_ID = C.USRINF_JWCD) END AS SORT_NO
+		FROM TBICM_MYGRP A
+			LEFT OUTER JOIN TBICM_GRPUSR B
+				ON A.MYGRP_NO = B.MYGRP_NO
+			LEFT OUTER JOIN TBICM_USRINF C
+				ON C.USRINF_ID = B.GRPUSR_ID
+		WHERE 1=1
+		AND A.MYGRP_NO = #MYGRP_NO#
+		ORDER BY C.USRINF_BSCD, SORT_NO, USRINF_ID_ORD
+	</select>
+	
+	<!-- My Group 삭제 -->
+	<delete id="DEL_GRP_001000" parameterClass="java.util.Map">
+		DELETE 
+		FROM TBICM_MYGRP 
+		WHERE 1=1
+		AND MYGRP_NO = #MYGRP_NO#
+		;
+		DELETE
+		FROM TBICM_GRPUSR
+		WHERE 1=1
+		AND MYGRP_NO = #MYGRP_NO#
+		;
+	</delete>
+	
+	<!-- My Group 수정 -->
+    <update id="UPT_GRP_001001" parameterClass="java.util.Map">
+    	UPDATE TBICM_MYGRP
+    		SET  
+    		MYGRP_NM 	= #MYGRP_NM#
+    		,MYGRP_UDT 	= NOW()
+    	WHERE 1=1
+    	AND MYGRP_NO = #MYGRP_NO#
+    	;
+    </update>
+    
+    <!-- My Group 사용자 삭제 -->
+    <delete id="UPT_GRP_001009" parameterClass="java.util.Map">
+    	DELETE
+    	FROM TBICM_GRPUSR
+    	WHERE 1=1
+    	AND MYGRP_NO = #MYGRP_NO#
+    	;
+    </delete>
+    
+    <!-- SMS, Push 사용자 수 조회 -->
+    <select id="SEL_MSG_S01000" resultClass="sqlMap">
+    	SELECT
+			SMSCNT,
+			PUSHCNT
+		FROM
+		(
+			SELECT 
+				COUNT(USRINF_ID) AS SMSCNT
+			FROM 
+			TBICM_USRINF A
+			WHERE A.USRINF_POLICY = 'P000000000'
+		) AS SMSCNT,
+		(
+			SELECT 
+				COUNT(USRINF_ID) AS PUSHCNT
+			FROM 
+			TBICM_USRINF A
+			WHERE A.USRINF_POLICY = 'P000000001'
+		) AS PUSHCNT
+    </select>
+    
+    <!-- 앱 정보 조회 -->
+    <select id="SEL_MSG_S01011" resultClass="sqlMap">
+    	SELECT
+	    	APPINF_NO
+			,APPINF_PKNM
+			,APPINF_APPNM
+			,APPINF_ID
+			,APPINF_KEY
+		FROM TBICM_APPINF
+		WHERE 1=1
+		AND APPINF_USEYN = 'Y'
+    </select>
+    
+    <!-- My Group 조회 -->
+    <select id="SEL_MSG_S01001" resultClass="sqlMap">
+    	SELECT
+    		MYGRP_NO
+    		,MYGRP_NM
+    	FROM TBICM_MYGRP A
+    	WHERE 1=1
+    	AND MYGRP_USEYN = 'Y'
+    	ORDER BY MYGRP_NO DESC
+    	;
+    </select>
+    
+    <!-- 사용자 토큰 조회 -->
+    <select id="SEL_ADM_TKN_S0001" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+    	SELECT
+    		USRINF_ID AS USRID
+    		,USRINF_PHONE AS PHONE
+    		,CASE WHEN IFNULL(USRINF_TOKEN, 'SMS') = 'SMS' || USRINF_TOKEN = '' || USRINF_TOKEN = 'NULL' THEN 'SMS' ELSE USRINF_TOKEN END AS TKNID
+    		,IFNULL(B.HPINF_OS,'S') AS OS
+    	FROM TBICM_USRINF A
+    	LEFT OUTER JOIN TBICM_HPINF B
+    		ON A.USRINF_ID = B.HPINF_USRID
+    	WHERE 1=1
+    	AND USRINF_JAEJIKSTATE = '01'
+    	AND B.HPINF_OS = #OS#
+    	AND USRINF_ID IN
+    	(
+    		$PARAMS$
+    	)
+    	;
+    </select>
+    
+    <!-- 예약전송 사용자 추가 -->
+    <update id="INS_RSV_001000" parameterClass="java.util.Map">
+    	INSERT INTO TBICM_RSVMGR
+    	(
+    		RSVMGR_NO
+			,PSHG_NO
+			,RSVMGR_IDS
+    	)
+    	VALUES
+    	(		
+    		#RSNO#
+    		,#PSNO#
+    		,#RSVMGR_IDS#
+    	)
+    	;
+    </update>
+    
+    <!-- 예약전송 건 확인 조회 -->
+    <select id="SEL_MSG_RSV_001" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+    	SELECT
+			A.PSHG_NO		AS PSNO
+			,A.PSHG_SNO		AS PSSNO
+			,A.PSHG_PACKNM	AS PACKNM
+			,A.PSHG_MSG		AS MSG
+			,A.PSHG_MKN		AS MKN
+			,A.PSHG_SKN		AS SKN
+			,A.PSHG_PKN		AS PKN
+			,A.PSHG_RVDT	AS RVDT
+			,A.PSHG_IMGLNK	AS IMGLNK
+			,A.PSHG_LNK		AS LNK 
+			,B.RSVMGR_IDS	AS IDS
+		FROM TBICM_PSHG A
+		LEFT OUTER JOIN TBICM_RSVMGR B
+			ON A.PSHG_NO = B.PSHG_NO
+		WHERE 1=1
+		AND A.PSHG_USEYN = 'Y'
+		AND A.PSHG_SKN = '02'
+		AND A.PSHG_SNDYN = 'N'
+		AND #TIME# >= A.PSHG_RVDT
+    	;
+    </select>
+    
+     <!-- 메시지 발송여부 변경 -->
+    <update id="UPT_MSG_001000" parameterClass="java.util.Map">
+    	UPDATE TBICM_PSHG
+    	SET PSHG_SNDYN = 'Y'
+    	WHERE 1=1
+    	AND PSHG_NO = #PSNO#
+    	;
+    </update>
+    
+    <!-- 통계 : 푸시 발송 성공 건 -->
+    <select id="SEL_STA_001009_01" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+    	SELECT
+			COUNT(B.RESMGR_NO) AS PS_CNT
+		FROM
+		( 
+			SELECT
+				PSHG_NO,
+				PSHG_SNO,
+				PSHG_PACKNM,
+				PSHG_RDT,
+				(
+					CASE WHEN PSHG_SKN = '02' AND PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN
+			FROM TBICM_PSHG
+		) A
+		LEFT OUTER JOIN TBICM_RESMGR B
+			ON A.PSHG_SNO = B.PSHG_SNO
+			AND B.RESMGR_STS NOT IN ('04','99')
+		WHERE 1=1
+		<isNotEmpty prepend="AND" property="searchCondition">
+			A.PSHG_PACKNM = #searchCondition#
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND A.SNDYN = 'Y'
+    </select>
+    
+    <!-- 통계 : 푸시 발송 실패 건 -->
+    <select id="SEL_STA_001009_02" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+    	SELECT
+			COUNT(B.RESMGR_NO) AS PF_CNT
+		FROM
+		( 
+			SELECT
+				PSHG_NO,
+				PSHG_SNO,
+				PSHG_PACKNM,
+				PSHG_RDT,
+				(
+					CASE WHEN PSHG_SKN = '02' AND PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN
+			FROM TBICM_PSHG
+		) A
+		LEFT OUTER JOIN TBICM_RESMGR B
+			ON A.PSHG_SNO = B.PSHG_SNO
+			AND B.RESMGR_STS = '99'
+		WHERE 1=1
+		<isNotEmpty prepend="AND" property="searchCondition">
+			A.PSHG_PACKNM = #searchCondition#
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND A.SNDYN = 'Y'
+    </select>
+    
+    <!-- 통계 : sms 발송 건 -->
+    <select id="SEL_STA_001009_03" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+    	SELECT
+			COUNT(B.RESMGR_NO) AS SMS_CNT
+		FROM
+		( 
+			SELECT
+				PSHG_NO,
+				PSHG_SNO,
+				PSHG_PACKNM,
+				PSHG_RDT,
+				(
+					CASE WHEN PSHG_SKN = '02' AND PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN
+			FROM TBICM_PSHG
+		) A
+		LEFT OUTER JOIN TBICM_RESMGR B
+			ON A.PSHG_SNO = B.PSHG_SNO
+			AND B.RESMGR_STS = '04'
+		WHERE 1=1
+		<isNotEmpty prepend="AND" property="searchCondition">
+			A.PSHG_PACKNM = #searchCondition#
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND A.SNDYN = 'Y'
+    </select>
+    
+    <!-- 통계 : 수신 성공 건 -->
+    <select id="SEL_STA_001009_04" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+    	SELECT
+			COUNT(B.RESMGR_NO) AS PR_CNT
+		FROM
+		( 
+			SELECT
+				PSHG_NO,
+				PSHG_SNO,
+				PSHG_PACKNM,
+				PSHG_RDT,
+				(
+					CASE WHEN PSHG_SKN = '02' AND PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN
+			FROM TBICM_PSHG
+		) A
+		LEFT OUTER JOIN TBICM_RESMGR B
+			ON A.PSHG_SNO = B.PSHG_SNO
+			AND B.RESMGR_STS IN ('02','03')
+		WHERE 1=1
+		<isNotEmpty prepend="AND" property="searchCondition">
+			A.PSHG_PACKNM = #searchCondition#
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND A.SNDYN = 'Y'
+    </select>
+    
+    <!-- 통계 : 읽음 성공 건 -->
+    <select id="SEL_STA_001009_05" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+    	SELECT
+			COUNT(B.RESMGR_NO) AS PRD_CNT
+		FROM
+		( 
+			SELECT
+				PSHG_NO,
+				PSHG_SNO,
+				PSHG_PACKNM,
+				PSHG_RDT,
+				(
+					CASE WHEN PSHG_SKN = '02' AND PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN
+			FROM TBICM_PSHG
+		) A
+		LEFT OUTER JOIN TBICM_RESMGR B
+			ON A.PSHG_SNO = B.PSHG_SNO
+			AND B.RESMGR_STS = '03'
+		WHERE 1=1
+		<isNotEmpty prepend="AND" property="searchCondition">
+			A.PSHG_PACKNM = #searchCondition#
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND A.SNDYN = 'Y'
+    </select>
+    
+    <!-- 통계 조회 -->
+    <select id="SEL_STA_001009" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+    	SELECT
+			PS_CNT,
+			PF_CNT,
+			SMS_CNT,
+			PR_CNT,
+			PS_CNT - PR_CNT AS PRF_CNT,
+			PRD_CNT,
+			PR_CNT - PRD_CNT AS PRDF_CNT
+		FROM
+		(
+			SELECT
+				COUNT(B.RESMGR_NO) AS PS_CNT,
+				COUNT(C.RESMGR_NO) AS PF_CNT,
+				COUNT(D.RESMGR_NO) AS SMS_CNT,
+				COUNT(E.RESMGR_NO) AS PR_CNT,
+				COUNT(F.RESMGR_NO) AS PRD_CNT
+			FROM
+			( 
+				SELECT
+					PSHG_NO,
+					PSHG_SNO,
+					PSHG_PACKNM,
+					PSHG_MSG,
+					PSHG_MKN,
+					PSHG_SKN,
+					PSHG_PKN,
+					PSHG_RVDT,
+					PSHG_IMGLNK,
+					PSHG_LNK,
+					PSHG_SNDYN,
+					PSHG_USEYN,
+					PSHG_RUSR,
+					PSHG_RDT,
+					PSHG_UDT,
+					(
+						CASE WHEN PSHG_SKN = '02' AND PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+						THEN
+							'N'
+						ELSE
+							'Y'
+						END
+					) AS SNDYN
+				FROM TBICM_PSHG
+			) A
+			LEFT OUTER JOIN TBICM_RESMGR B
+				ON A.PSHG_SNO = B.PSHG_SNO
+				AND B.RESMGR_STS NOT IN ('04','99')
+			LEFT OUTER JOIN TBICM_RESMGR C
+				ON A.PSHG_SNO = C.PSHG_SNO
+				AND C.RESMGR_STS = '99'
+			LEFT OUTER JOIN TBICM_RESMGR D
+				ON A.PSHG_SNO = D.PSHG_SNO
+				AND D.RESMGR_STS = '04'
+			LEFT OUTER JOIN TBICM_RESMGR E
+				ON A.PSHG_SNO = E.PSHG_SNO
+				AND E.RESMGR_STS IN ('02','03')
+			LEFT OUTER JOIN TBICM_RESMGR F
+				ON A.PSHG_SNO = F.PSHG_SNO
+				AND F.RESMGR_STS = '03'
+			WHERE 1=1
+			<isNotEmpty prepend="AND" property="searchCondition">
+				A.PSHG_PACKNM = #searchCondition#
+			</isNotEmpty>
+			<isNotEmpty prepend="AND" property="stDate">
+				DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+			</isNotEmpty>
+			<isNotEmpty prepend="AND" property="etDate">
+				REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+			</isNotEmpty>
+			AND A.SNDYN = 'Y'
+		) A
+    </select>
+    
+    <!-- 통계 리스트 조회 -->
+    <select id="SEL_STA_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+   		SELECT
+			*
+		FROM
+		(
+			SELECT
+				@RNUM := @RNUM+1 AS ROWNUM
+				,A.*
+			FROM
+			(
+			SELECT
+				A.PSHG_NO AS PSNO,
+				A.PSHG_SNO AS PSSNO,
+				A.PSHG_PACKNM AS PACKNM,
+				(SELECT APPINF_APPNM FROM TBICM_APPINF WHERE APPINF_PKNM = A.PSHG_PACKNM) AS APPNM,
+				A.PSHG_MSG AS MSG,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO) AS TOT_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS NOT IN ('04', '99')) AS S_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS IN ('02', '03')) AS R_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '03') AS RD_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '99') AS F_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '04') AS SMS_CNT,
+				A.PSHG_RVDT AS RVDT,
+				A.PSHG_SKN AS SKN,
+				(
+					CASE WHEN A.PSHG_SKN = '02' 
+					THEN 
+						CONCAT(SUBSTRING(PSHG_RVDT,1,4),'-',SUBSTRING(PSHG_RVDT,5,2),'-',SUBSTRING(PSHG_RVDT,7,2),' ',SUBSTRING(PSHG_RVDT,9,2),':',SUBSTRING(PSHG_RVDT,11,2)) 
+					ELSE 
+						DATE_FORMAT(A.PSHG_RDT, '%Y-%m-%d %H:%i') 
+					END
+				) AS SNDDAT,
+				(
+					CASE WHEN A.PSHG_SKN = '02' AND A.PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN,
+				A.PSHG_RDT
+			FROM TBICM_PSHG A, (SELECT @ROWNUM:=0) R
+			) A, (SELECT @RNUM:=0) R
+			WHERE 1=1
+			<isNotEmpty prepend="AND" property="searchCondition">
+				A.PACKNM = #searchCondition#
+			</isNotEmpty>
+			<isNotEmpty prepend="AND" property="stDate">
+				DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+			</isNotEmpty>
+			<isNotEmpty prepend="AND" property="etDate">
+				REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+			</isNotEmpty>
+			AND A.SNDYN = 'Y'
+			ORDER BY A.PSHG_RDT DESC
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+
+	<!-- 통계 리스트 갯수 조회 -->
+    <select id="SEL_STA_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+   		SELECT
+			COUNT(A.PSNO) AS CNT
+		FROM
+		(
+		SELECT
+			A.PSHG_NO AS PSNO,
+			A.PSHG_SNO AS PSSNO,
+			A.PSHG_PACKNM AS PACKNM,
+			(SELECT APPINF_APPNM FROM TBICM_APPINF WHERE APPINF_PKNM = A.PSHG_PACKNM) AS APPNM,
+			A.PSHG_MSG AS MSG,
+			(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO) AS TOT_CNT,
+			(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS NOT IN ('04', '99')) AS S_CNT,
+			(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS IN ('02', '03')) AS R_CNT,
+			(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '03') AS RD_CNT,
+			(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '99') AS F_CNT,
+			(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '04') AS SMS_CNT,
+			A.PSHG_RVDT AS RVDT,
+			A.PSHG_SKN AS SKN,
+			(
+				CASE WHEN A.PSHG_SKN = '02' 
+				THEN 
+					CONCAT(SUBSTRING(PSHG_RVDT,1,4),'-',SUBSTRING(PSHG_RVDT,5,2),'-',SUBSTRING(PSHG_RVDT,7,2),' ',SUBSTRING(PSHG_RVDT,9,2),':',SUBSTRING(PSHG_RVDT,11,2)) 
+				ELSE 
+					DATE_FORMAT(A.PSHG_RDT, '%Y-%m-%d %H:%i') 
+				END
+			) AS SNDDAT,
+			(
+				CASE WHEN A.PSHG_SKN = '02' AND A.PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i')
+				THEN
+					'N'
+				ELSE
+					'Y'
+				END
+			) AS SNDYN,
+			A.PSHG_RDT
+		FROM TBICM_PSHG A, (SELECT @ROWNUM:=0) R
+		) A, (SELECT @RNUM:=0) R
+		WHERE 1=1
+		<isNotEmpty prepend="AND" property="searchCondition">
+			A.PACKNM = #searchCondition#
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+		</isNotEmpty>
+		AND A.SNDYN = 'Y'
+    </select>
+    
+    <!-- 전송결과 조회 -->
+    <select id="SEL_STA_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+    	SELECT
+    		A.RESMGR_NO		AS RSNO,
+    		A.PSHG_SNO		AS PSSNO,
+    		A.RESMGR_ID		AS RSID,
+    		B.USRINF_NM		AS USRNM,
+    		C.GRPINF_JSNM	AS JSNM,
+    		C.GRPINF_BSNM	AS BSNM,
+    		A.RESMGR_TKNID	AS TKNID,
+    		A.RESMGR_STS	AS STS,
+    		A.RESMGR_RST	AS RST,
+    		A.RESMGR_USEYN	AS USEYN,
+    		A.RESMGR_RDT	AS RDT,
+    		A.RESMGR_UDT	AS UDT
+    	FROM TBICM_RESMGR A
+    	LEFT OUTER JOIN TBICM_USRINF B
+    		ON A.RESMGR_ID	= B.USRINF_ID
+    	LEFT OUTER JOIN TBICM_GRPINF C
+    		ON B.USRINF_JSCD = C.GRPINF_JSCD
+    		AND B.USRINF_BSCD = C.GRPINF_BSCD
+		WHERE 1=1
+		AND PSHG_SNO = #PSHG_SNO#
+		;
+    </select>
+    
+    <select id="SEL_STA_001002" parameterClass="java.util.Map" resultClass="sqlMap">
+    	SELECT
+    		PSHG_MSG AS MSG,
+    		PSHG_PACKNM AS PACKNM,
+    		PSHG_IMGLNK AS IMGLNK,
+    		PSHG_LNK	AS LNK,
+    		(SELECT APPINF_APPNM AS APPNM FROM TBICM_APPINF WHERE 1=1 AND APPINF_PKNM = PSHG_PACKNM) AS APPNM,
+    		(SELECT APPINF_KEY AS APPKEY FROM TBICM_APPINF WHERE 1=1 AND APPINF_PKNM = PSHG_PACKNM) AS APPKEY
+    	FROM TBICM_PSHG
+    	WHERE 1=1
+    	AND PSHG_SNO = #PSHG_SNO# 
+    	;
+    </select>
+    
+    <!-- 통계 CSV 다운 리스트 조회 -->
+    <select id="SEL_STA_CSV_DOWN" parameterClass="java.util.Map" resultClass="sqlMap">
+    	SELECT
+			*
+		FROM
+		(
+			SELECT
+				@RNUM := @RNUM+1 AS ROWNUM,
+				A.APPNM,
+				A.MSG,
+				A.TOT_CNT,
+				A.S_CNT,
+				A.R_CNT,
+				A.RD_CNT,
+				A.F_CNT,
+				A.SMS_CNT,
+				SNDDAT
+			FROM
+			(
+			SELECT
+				A.PSHG_NO AS PSNO,
+				A.PSHG_SNO AS PSSNO,
+				A.PSHG_PACKNM AS PACKNM,
+				(SELECT APPINF_APPNM FROM TBICM_APPINF WHERE APPINF_PKNM = A.PSHG_PACKNM) AS APPNM,
+				A.PSHG_MSG AS MSG,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO) AS TOT_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS NOT IN ('04', '99')) AS S_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS IN ('02', '03')) AS R_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '03') AS RD_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '99') AS F_CNT,
+				(SELECT COUNT(PSHG_SNO) FROM TBICM_RESMGR WHERE PSHG_SNO = A.PSHG_SNO AND RESMGR_STS = '04') AS SMS_CNT,
+				A.PSHG_RVDT AS RVDT,
+				A.PSHG_SKN AS SKN,
+				(
+					CASE WHEN A.PSHG_SKN = '02' 
+					THEN 
+						CONCAT(SUBSTRING(PSHG_RVDT,1,4),'-',SUBSTRING(PSHG_RVDT,5,2),'-',SUBSTRING(PSHG_RVDT,7,2),' ',SUBSTRING(PSHG_RVDT,9,2),':',SUBSTRING(PSHG_RVDT,11,2)) 
+					ELSE 
+						DATE_FORMAT(A.PSHG_RDT, '%Y-%m-%d %H:%i') 
+					END
+				) AS SNDDAT,
+				(
+					CASE WHEN A.PSHG_SKN = '02' AND A.PSHG_RVDT > DATE_FORMAT(NOW(), '%Y%m%d%H%i') 
+					THEN
+						'N'
+					ELSE
+						'Y'
+					END
+				) AS SNDYN,
+				A.PSHG_RDT
+			FROM TBICM_PSHG A, (SELECT @ROWNUM:=0) R
+			) A, (SELECT @RNUM:=0) R
+			WHERE 1=1
+			<isNotEmpty prepend="AND" property="searchCondition">
+				A.PACKNM = #searchCondition#
+			</isNotEmpty>
+			<isNotEmpty prepend="AND" property="stDate">
+				DATE_FORMAT(A.PSHG_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+			</isNotEmpty>
+			<isNotEmpty prepend="AND" property="etDate">
+				REPLACE(#etDate#,'-','') >= DATE_FORMAT(A.PSHG_RDT, '%Y%m%d')
+			</isNotEmpty>
+			AND A.SNDYN = 'Y'
+			ORDER BY A.PSHG_RDT ASC
+		) B
+    </select>
+    
+    <!-- 앱 사용자 조회(실패건) -->
+    <select id="SEL_STA_001003" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+	    SELECT
+	    	*
+	    FROM
+	    (
+	    	SELECT
+	    		RESMGR_NO AS RSNO,
+	    		PSHG_SNO  AS PSSNO,
+	    		RESMGR_ID AS USRID,
+				(SELECT USRINF_TOKEN FROM TBICM_USRINF WHERE USRINF_ID=A.RESMGR_ID) AS TKNID,
+				(SELECT HPINF_OS FROM TBICM_HPINF WHERE HPINF_USRID=A.RESMGR_ID) AS OS,
+				(SELECT PSHG_IMGLNK FROM TBICM_PSHG WHERE PSHG_SNO=A.PSHG_SNO) AS IMGLNK,
+				(SELECT PSHG_LNK FROM TBICM_PSHG WHERE PSHG_SNO=A.PSHG_SNO) AS LNK
+			FROM TBICM_RESMGR A
+			WHERE 1=1
+			AND RESMGR_STS = '99'
+			AND RESMGR_USEYN = 'Y'
+			AND PSHG_SNO = #PSHG_SNO#
+		) A
+		WHERE 1=1
+		AND A.OS = #OS#
+	    ;
+    </select>
+    
+    <!-- 전송이력 수정 -->
+    <update id="UPT_SND_001001"  parameterClass="java.util.Map">
+		UPDATE TBICM_RESMGR
+		SET RESMGR_TKNID = #TKNID#,
+			RESMGR_STS = #STS#,
+			RESMGR_RST = #RST#
+		WHERE 1=1
+		AND RESMGR_NO = #RSNO#
+		AND RESMGR_ID = #USRID#
+		;
+    </update>
+    
+    <!-- 서버등록 리스트 조회 -->
+	<select id="SEL_SVR_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+		SELECT
+			*
+		FROM
+		(
+			SELECT
+			@RNUM := @RNUM+1 AS ROWNUM
+			,A.SVRMGR_NO
+			,A.SVRMGR_NM
+			,A.SVRMGR_IP
+			,A.SVRMGR_USEYN
+			,DATE_FORMAT(A.SVRMGR_RDT, '%Y-%m-%d') AS SVRMGR_RDT
+			,DATE_FORMAT(A.SVRMGR_UDT, '%Y-%m-%d') AS SVRMGR_UDT
+			FROM
+			(
+				SELECT
+					SVRMGR_NO
+					,SVRMGR_NM
+					,SVRMGR_IP
+					,SVRMGR_USEYN
+					,SVRMGR_RDT
+					,SVRMGR_UDT
+				FROM TBICM_SVRMGR A, (SELECT @ROWNUM:=0) R
+				WHERE 1=1
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						SVRMGR_NM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+					<isEqual prepend="AND" property="searchCondition" compareValue="1">
+						SVRMGR_IP LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="stDate">
+					DATE_FORMAT(SVRMGR_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="etDate">
+					REPLACE(#etDate#,'-','') >= DATE_FORMAT(SVRMGR_RDT, '%Y%m%d')
+				</isNotEmpty>
+				ORDER BY SVRMGR_NO DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+    
+    <!-- 서버등록 리스트 개수 조회 -->
+	<select id="SEL_SVR_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+		SELECT
+			COUNT(*) AS TOTCNT
+		FROM TBICM_SVRMGR
+		WHERE 1=1
+		<isNotEmpty property="searchKeyword">
+			<isEqual prepend="AND" property="searchCondition" compareValue="0">
+				SVRMGR_NM LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+			<isEqual prepend="AND" property="searchCondition" compareValue="1">
+				SVRMGR_IP LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(SVRMGR_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(SVRMGR_RDT, '%Y%m%d')
+		</isNotEmpty>
+		;
+    </select>
+    
+    <!-- 서버등록 -->
+    <update id="INS_SVR_001001"  parameterClass="java.util.Map">
+    	INSERT INTO TBICM_SVRMGR
+    	(
+    		SVRMGR_NO
+			,SVRMGR_NM
+			,SVRMGR_IP
+			,SVRMGR_USEYN
+    	)
+    	VALUES
+    	(		
+    		#SVRMGR_NO#
+			,#SVRMGR_NM#
+			,#SVRMGR_IP#
+			,#SVRMGR_USEYN#
+    	)
+    	;
+    </update>
+    
+    <!-- 서버 상세조회 -->
+	<select id="SEL_SVR_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT    
+			SVRMGR_NO
+			,SVRMGR_NM
+			,SVRMGR_IP
+			,SVRMGR_USEYN
+			,SVRMGR_RDT
+			,SVRMGR_UDT
+		FROM TBICM_SVRMGR A
+		WHERE 1=1   
+		AND SVRMGR_NO = #SVRMGR_NO#
+	</select>
+	
+	<!-- 서버 수정 -->
+    <update id="UPT_SVR_001001" parameterClass="java.util.Map">
+    	UPDATE TBICM_SVRMGR
+    		SET  
+    		SVRMGR_NM		= #SVRMGR_NM#
+    		,SVRMGR_IP 		= #SVRMGR_IP#
+    		,SVRMGR_USEYN 	= #SVRMGR_USEYN#
+    		,SVRMGR_UDT 		= NOW()
+    	WHERE 1=1
+    	AND SVRMGR_NO = #SVRMGR_NO#
+    	;
+    </update>
+	
+	<!-- 서버 삭제 -->
+	<delete id="DEL_SVR_001000" parameterClass="java.util.Map">
+		DELETE 
+		FROM TBICM_SVRMGR 
+		WHERE 1=1
+		AND SVRMGR_NO = #SVRMGR_NO#
+	</delete>
+    
+    <!-- 허용 서버 조회 -->
+    <select id="SEL_SVR_S001009" resultClass="sqlMap">
+    	SELECT
+    		SVRMGR_IP	AS IPMGRIP
+    	FROM TBICM_SVRMGR
+    	WHERE 1=1
+    	AND SVRMGR_USEYN = 'Y'
+    	;
+    </select>
+    
+    <!-- 관리자 리스트 조회 -->
+	<select id="SEL_ADM_001000" parameterClass="kcert.admin.vo.SearchVO" resultClass="sqlMap">
+		SELECT
+			*
+		FROM
+		(
+			SELECT
+			@RNUM := @RNUM+1 AS ROWNUM
+			,ADMINF_ID
+			,ADMINF_PWD
+			,ADMINF_NM
+			,ADMINF_GRD
+			,ADMINF_DELYN
+			,ADMINF_RUSR
+			,DATE_FORMAT(A.ADMINF_RDT, '%Y-%m-%d') AS ADMINF_RDT
+			,DATE_FORMAT(A.ADMINF_UDT, '%Y-%m-%d') AS ADMINF_UDT
+			FROM
+			(
+				SELECT
+					ADMINF_ID
+					,ADMINF_PWD
+					,ADMINF_NM
+					,ADMINF_GRD
+					,ADMINF_DELYN
+					,ADMINF_RUSR
+					,ADMINF_RDT
+					,ADMINF_UDT
+				FROM TBICM_ADMINF A, (SELECT @ROWNUM:=0) R
+				WHERE 1=1
+				<isNotEmpty property="searchKeyword">
+					<isEqual prepend="AND" property="searchCondition" compareValue="0">
+						ADMINF_ID LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+					<isEqual prepend="AND" property="searchCondition" compareValue="1">
+						ADMINF_NM LIKE CONCAT('%',#searchKeyword#,'%')
+					</isEqual>
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="stDate">
+					DATE_FORMAT(ADMINF_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+				</isNotEmpty>
+				<isNotEmpty prepend="AND" property="etDate">
+					REPLACE(#etDate#,'-','') >= DATE_FORMAT(ADMINF_RDT, '%Y%m%d')
+				</isNotEmpty>
+				ORDER BY ADMINF_RDT DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $firstIndex$+1 AND $firstIndex$+1*10
+		;
+    </select>
+    
+    <!-- 관리자 리스트 개수 조회 -->
+	<select id="SEL_ADM_001000_CNT" parameterClass="kcert.admin.vo.SearchVO" resultClass="int">
+		SELECT
+			COUNT(*) AS TOTCNT
+		FROM TBICM_ADMINF
+		WHERE 1=1
+		<isNotEmpty property="searchKeyword">
+			<isEqual prepend="AND" property="searchCondition" compareValue="0">
+				ADMINF_ID LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+			<isEqual prepend="AND" property="searchCondition" compareValue="1">
+				ADMINF_NM LIKE CONCAT('%',#searchKeyword#,'%')
+			</isEqual>
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="stDate">
+			DATE_FORMAT(ADMINF_RDT, '%Y%m%d') >= REPLACE(#stDate#,'-','')
+		</isNotEmpty>
+		<isNotEmpty prepend="AND" property="etDate">
+			REPLACE(#etDate#,'-','') >= DATE_FORMAT(ADMINF_RDT, '%Y%m%d')
+		</isNotEmpty>
+		;
+    </select>
+    
+    <!-- 관리자 등록 -->
+    <update id="INS_ADM_001001"  parameterClass="java.util.Map">
+    	INSERT INTO TBICM_ADMINF
+    	(
+    		ADMINF_ID
+			,ADMINF_PWD
+			,ADMINF_NM
+			,ADMINF_GRD
+			,ADMINF_DELYN
+			,ADMINF_RUSR
+    	)
+    	VALUES
+    	(		
+    		#ADMINF_ID#
+			,#ADMINF_PWD#
+			,#ADMINF_NM#
+			,'1'
+			,#ADMINF_DELYN#
+			,#MGR_ID#
+    	)
+    	;
+    </update>
+    
+    <!-- 관리자 상세조회 -->
+	<select id="SEL_ADM_001001" parameterClass="java.util.Map" resultClass="sqlMap">
+		SELECT    
+			ADMINF_ID
+			,ADMINF_PWD
+			,ADMINF_NM
+			,ADMINF_GRD
+			,ADMINF_DELYN
+			,ADMINF_RUSR
+			,ADMINF_RDT
+			,ADMINF_UDT
+		FROM TBICM_ADMINF A
+		WHERE 1=1   
+		AND ADMINF_ID = #ADMINF_ID#
+	</select>
+	
+	<!-- 관리자 수정 -->
+    <update id="UPT_ADM_001001" parameterClass="java.util.Map">
+    	UPDATE TBICM_ADMINF
+    		SET  
+    		ADMINF_PWD		= #ADMINF_PWD#
+    		,ADMINF_NM 		= #ADMINF_NM#
+    		,ADMINF_DELYN 	= #ADMINF_DELYN#
+    		,ADMINF_UDT 	= NOW()
+    	WHERE 1=1
+    	AND ADMINF_ID = #ADMINF_ID#
+    	;
+    </update>
+	
+	<!-- 관리자 삭제 -->
+	<delete id="DEL_ADM_001000" parameterClass="java.util.Map">
+		DELETE 
+		FROM TBICM_ADMINF 
+		WHERE 1=1
+		AND ADMINF_ID = #ADMINF_ID#
+	</delete>
+</sqlMap>

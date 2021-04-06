@@ -1,0 +1,38 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" errorPage = "/WEB-INF/jsp/error.jsp"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core"%>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions"%><%
+	String ROOT_PATH	= "/";
+	String IMG_PATH		= ROOT_PATH+"images/";
+	String CSS_PATH		= ROOT_PATH+"css/";
+	String JS_PATH		= ROOT_PATH+"js/";
+	
+	String _Agent 	= request.getHeader("User-Agent");
+	String _Browser	= "";
+    if(_Agent==null){
+    	_Browser	= "MSIE";
+    }else if (_Agent.indexOf("MSIE") > -1){
+    	_Browser	= "MSIE";
+    }else if (_Agent.indexOf("Chrome") > -1){
+    	_Browser	= "Chrome";
+    }else if (_Agent.indexOf("Opera") > -1){
+    	_Browser	= "Opera";
+    }
+%>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head lang="ko">
+	<meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+	<meta http-equiv="Cache-Control" content="No-Cache">
+	<meta http-equiv="Pragma" content="No-Cache">
+	<meta http-equiv="Expires" content="now">
+	<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+	<meta name="description" content="">
+	<title>:::: push ::::</title>
+	<link rel="stylesheet" type="text/css" href="<%=CSS_PATH %>style.css" media="all">
+	<link rel="stylesheet" href="<%=CSS_PATH %>jquery-ui.css">
+	
+	<script language="javascript" src="<%=JS_PATH%>jquery-1.10.2.js"></script>
+	<script language="javascript" src="<%=JS_PATH%>jquery-ui.js"></script>
+	<script language="javascript" src="<%=JS_PATH%>common.js"></script>
+	<script language="javascript" src="<%=JS_PATH%>JPrototype.js"></script>
+</head>

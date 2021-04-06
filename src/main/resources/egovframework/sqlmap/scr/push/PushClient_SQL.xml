@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//iBATIS.com//DTD SQL Map 2.0//EN" "http://www.ibatis.com/dtd/sql-map-2.dtd">
+<sqlMap namespace="PushClient">
+	<typeAlias  alias="sqlMapNoCamel" type="kcert.framework.util.EgovMapNoCamel"/>
+	<typeAlias  alias="sqlMap" type="egovframework.rte.psl.dataaccess.util.EgovMap"/>
+	
+	<parameterMap id="SequenceParams" class="map">
+		<parameter property="CD" jdbcType="VARCHAR" javaType="java.lang.String" mode="IN"/>
+		<parameter property="SQ" jdbcType="NUMERIC" javaType="java.lang.Long" mode="OUT"/>
+	</parameterMap>
+	
+	<!-- 시퀀스 채번 -->
+	<procedure id="client_nextval" parameterMap="SequenceParams">
+		{CALL SP_NEXTVAL(?,?)}
+	</procedure>
+	
+	<!-- 시퀀스 번호 확인 -->
+	<procedure id="client_currentval" parameterMap="SequenceParams">
+		{CALL SP_CURRVAL(?,?)}
+	</procedure>
+	
+	<!-- 앱 일련번호 조회 -->
+	<select id="SEL_CLA_APP_SEQ" parameterClass="java.util.Map" resultClass="java.lang.String">
+		SELECT 
+			APPINF_NO AS APNO
+		FROM TBICM_APPINF
+		WHERE 1=1
+		AND APPINF_PKNM = #PACKAGE#
+		;
+    </select>
+    
+    <!-- 앱 별 토큰 아이디 저장 -->
+    <update id="INS_CLA_TKN_SND" parameterClass="java.util.Map">
+		INSERT INTO TBICM_TKNMGR(
+			 TKNMGR_NO
+			,APPINF_NO
+			,TKNMGR_TOKEN
+		)VALUES(
+			 #TKNO#
+			,#APNO#
+			,#TOKEN#
+		)
+		;
+    </update>
+    
+    <!-- 앱 서버키 조회 -->
+	<select id="SEL_CLA_APP_KEY" parameterClass="java.util.Map" resultClass="java.lang.String">
+		SELECT 
+			APPINF_KEY
+		FROM TBICM_APPINF
+		WHERE 1=1
+		AND APPINF_PKNM = #PACKAGE#
+		;
+    </select>
+    
+    <!-- 앱 사용자 조회 -->
+    <select id="SEL_CLA_TKN_S0001" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+    	SELECT
+    		USRINF_ID	AS USRID
+    		,USRINF_TOKEN AS TKNID
+    		,IFNULL(B.HPINF_OS,'S') AS OS
+    	FROM TBICM_USRINF A
+    	LEFT OUTER JOIN TBICM_HPINF B
+    		ON A.USRINF_ID = B.HPINF_USRID
+    	WHERE 1=1
+    	AND USRINF_JAEJIKSTATE = '01'
+    	AND USRINF_POLICY = 'P000000001'
+    	AND USRINF_TOKEN IS NOT NULL
+    	<isNotEmpty property="PKN">
+			<isEqual prepend="AND" property="PKN" compareValue="01">
+				USRINF_RCVBRD1 = 'Y'
+			</isEqual>
+			<isEqual prepend="AND" property="PKN" compareValue="02">
+				USRINF_RCVBRD2 = 'Y'
+			</isEqual>
+		</isNotEmpty>
+		AND B.HPINF_OS = #OS#
+    	;
+    </select>
+    
+    
+    <!-- sms 사용자 -->
+    <select id="SEL_CLA_SMS_S0001" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+    	SELECT
+    		USRINF_ID AS USRID
+    		,USRINF_PHONE AS PHONE
+    	FROM TBICM_USRINF
+    	WHERE 1=1
+    	AND USRINF_JAEJIKSTATE = '01'
+    	AND USRINF_POLICY = 'P000000000'
+    	AND USRINF_PHONE IS NOT NULL
+    	AND USRINF_PHONE != ''
+    	;
+    </select>
+    
+    <!-- 푸시 발송이력 저장 -->
+    <update id="INS_CLA_FCM_SND" parameterClass="java.util.Map">
+		INSERT INTO TBICM_PSHG(
+			PSHG_NO
+			,PSHG_SNO
+			,PSHG_PACKNM
+			,PSHG_MSG
+			,PSHG_MKN
+			,PSHG_SKN
+			,PSHG_PKN
+			,PSHG_RVDT
+			,PSHG_IMGLNK
+			,PSHG_LNK
+			,PSHG_SNDYN
+			,PSHG_RUSR
+		)VALUES(
+			 #PSNO#
+			,#PSSNO#
+			,#PACKAGE#
+			,#MSG#
+			,#MKN#
+			,#SKN#
+			,#PKN#
+			,#RVDT#
+			,#IMGLNK#
+			,#LNK#
+			,#SNDYN#
+			,#RUSR#
+		)
+		;
+    </update>
+    
+    <!-- 응답 이력 저장 -->
+    <update id="INS_CLA_SND_RES" parameterClass="java.util.Map">
+		INSERT INTO TBICM_RESMGR(
+			RESMGR_NO
+			,PSHG_SNO
+			,RESMGR_ID
+			,RESMGR_TKNID
+			,RESMGR_STS
+			,RESMGR_RST
+		)VALUES(
+			 #RSNO#
+			,#PSSNO#
+			,#USRID#
+			,#TKNID#
+			,#STS#
+			,#RST#
+		)
+		;
+    </update>
+    
+    <!-- 긴급공지사항 조회(앱) -->
+    <select id="SEL_BRD_A01001" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+    	SELECT
+    	*
+    	FROM
+    	(
+	    	SELECT
+	    		@RNUM := @RNUM+1 AS ROWNUM,
+	    		A.*
+	    	FROM
+	    	(
+				SELECT 
+					EMGBRD_NO AS BOARDIDX, 
+					EMGBRD_TTL AS BOARDTITLE, 
+					SUBSTRING(REPLACE(REPLACE(REPLACE(DATE_FORMAT(EMGBRD_UDT, '%Y-%m-%d %T.%f'),'-',''),':',''),' ',''),1,8) AS BOARDDAT
+				FROM TBICM_EMGBRD
+				WHERE EMGBRD_DELYN = 'N'
+				<isNotEmpty property="SETTEXT">
+					AND EMGBRD_TTL LIKE CONCAT('%',#SETTEXT#,'%')
+				</isNotEmpty>
+				ORDER BY EMGBRD_UDT DESC
+			) A,
+			(SELECT @RNUM:=0) R
+		) B
+		WHERE B.ROWNUM BETWEEN $FIRSTINDEX$+1 AND $FIRSTINDEX$+1*$ROWCOUNT$
+    </select>
+    
+    <!-- 긴급공지사항 상세조회(앱) -->
+    <select id="SEL_BRD_A01002" parameterClass="java.util.Map" resultClass="sqlMapNoCamel">
+		SELECT 
+			EMGBRD_NO AS BOARDIDX, 
+			EMGBRD_TTL AS BOARDTITLE, 
+			EMGBRD_CNTNT AS BOARDCNTNT, 
+			SUBSTRING(REPLACE(REPLACE(REPLACE(DATE_FORMAT(EMGBRD_UDT, '%Y-%m-%d %T.%f'),'-',''),':',''),' ',''),1,8) AS BOARDDAT
+		FROM TBICM_EMGBRD
+		WHERE 1=1
+		AND EMGBRD_DELYN = 'N'
+		AND EMGBRD_NO = #BOARD_IDX#
+		;
+    </select>
+    
+    <!-- 긴급공지사항 팝업 안내 조회(앱) -->
+    <select id="SEL_BRD_P01000" resultClass="sqlMapNoCamel">
+    	SELECT
+    		EMGBRD_NO AS ENO,
+			EMGBRD_TTL AS TTL,
+			EMGBRD_CNTNT AS CNTNT,
+			EMGBRD_STDT AS STDT,
+			EMGBRD_EDDT AS EDDT,
+			EMGBRD_ORD AS ORD
+		FROM TBICM_EMGBRD
+		WHERE 1=1
+		AND EMGBRD_DELYN != 'Y'
+		AND EMGBRD_ORD != 'OFF'
+		AND EMGBRD_EDDT >= DATE_FORMAT(NOW(), '%Y%m%d%H%i')
+		ORDER BY EMGBRD_ORD
+		;
+    </select>
+    
+    <!-- 수신여부 변경 -->
+    <update id="UPT_BRD_U01001" parameterClass="java.util.Map">
+    	UPDATE TBICM_USRINF
+    	SET
+    		USRINF_UDT = NOW()
+    		<isNotEmpty property="RCV1"> 
+	    		, USRINF_RCVBRD1 = #RCV1#
+	    	</isNotEmpty>
+	    	<isNotEmpty property="RCV2"> 
+	    		, USRINF_RCVBRD2 = #RCV2#
+	    	</isNotEmpty>
+    	WHERE 1=1
+    	AND USRINF_ID = #USER_ID#
+    	;
+    </update>
+    
+    <!-- 푸시 수신이력 변경 -->
+    <update id="UPT_PSH_U01001" parameterClass="java.util.Map">
+    	UPDATE TBICM_RESMGR
+    	SET RESMGR_STS = #STS#
+    	WHERE 1=1
+    	AND PSHG_SNO = #PSSNO#
+    	AND RESMGR_ID = #USERID#
+    	;
+    </update>
+    
+    <!-- 테스트 토큰 아이디 조회 -->
+    <select id="SEL_CLA_TKNID_TEST" parameterClass="java.util.Map" resultClass="java.lang.String">
+    	SELECT
+    		A.USRINF_TOKEN 			AS TKNID,
+    		IFNULL(B.HPINF_OS,'S') 	AS OS
+		FROM TBICM_USRINF A
+		LEFT OUTER JOIN TBICM_HPINF B
+			ON A.USRINF_ID = B.HPINF_USRID
+		WHERE 1=1
+		AND USRINF_ID	= #USRID#
+		;
+    </select>
+    
+</sqlMap>
