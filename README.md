@@ -6,5 +6,5 @@
 > Mobile App Push 전송에 고민하시는 분들에게 도움이 되었으면 좋겠습니다.
 
 ```
-git clone 
+git clone https://github.com/suhojang/FCM-PushManager.git
 ```
